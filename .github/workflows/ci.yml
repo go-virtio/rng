@@ -1,0 +1,126 @@
+# go-virtio/rng CI — vet, gofmt, 100%-coverage gate, and a multi-arch
+# TEST matrix on every push/PR. This is a pure-Go (CGO=0) virtio-rng entropy
+# driver that is NOT part of any workspace, so every Go invocation runs with
+# GOWORK=off.
+#
+# Tests RUN (not just build) on all six 64-bit targets the go-virtio stack
+# supports: amd64 + arm64 natively, and riscv64/loong64/ppc64le/s390x under
+# QEMU. virtio is LITTLE-ENDIAN; s390x is BIG-ENDIAN, so it exercises the
+# byte-order handling of github.com/go-virtio/common end to end on the
+# opposite byte order from amd64/arm64. The 100% statement-coverage gate is
+# enforced on every arch.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOWORK: off
+  CGO_ENABLED: 0
+
+jobs:
+  native:
+    name: native ${{ matrix.arch }} (vet + gofmt + 100% coverage)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      - run: go version
+
+      # `unsafeptr` is disabled: readBufferBytes converts a device DMA address
+      # (a plain uintptr handed back by the PageAllocator) into an
+      # unsafe.Pointer. That is the documented hardware-driver idiom, not a
+      # moved-Go-pointer bug, but go vet's unsafeptr heuristic cannot tell the
+      # two apart and flags a false positive. Every other vet check stays on.
+      - name: go vet
+        run: go vet -unsafeptr=false ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needs to be run on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: test + coverage gate (100%)
+        run: |
+          go test -coverprofile=cover.out ./...
+          go tool cover -func=cover.out | tee cover.txt
+          pct=$(go tool cover -func=cover.out | tail -n 1 | awk '{print $3}' | tr -d '%')
+          echo "total coverage: ${pct}%"
+          # Org-wide hard rule: 100% statement coverage. Never lowered — fill
+          # the gap with a test, or delete the unreachable code.
+          awk -v p="$pct" 'BEGIN { exit !(p+0 >= 100.0) }' || {
+            echo "::error::coverage ${pct}% < 100.0%"; exit 1; }
+
+  # Emulated cross-arch TEST validation for the 64-bit targets with no native
+  # GitHub runner. QEMU is registered via binfmt; the test binary is cross-
+  # compiled per package and run under a debian:trixie container, gating own-
+  # package coverage at 100%. s390x is BIG-ENDIAN: it exercises the go-virtio
+  # byte-order handling on the opposite byte order from amd64/arm64. No fuzzing
+  # under QEMU (TCG emulation is too slow/fragile for the fuzzer).
+  emulated:
+    name: emulated ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: riscv64, image: "debian:trixie",                 qemu: "rv64,v=true,vlen=128" }
+          - { arch: loong64, image: "ghcr.io/loong64/debian:trixie", qemu: "la464" }
+          - { arch: ppc64le, image: "debian:trixie",                 qemu: "power9" }
+          - { arch: s390x,   image: "debian:trixie",                 qemu: "qemu" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: Register QEMU binfmt handlers
+        run: docker run --privileged --rm tonistiigi/binfmt --install all
+
+      # Mirror the native coverage gate by cross-compiling one test binary per
+      # package (`go test -c` defaults -cover to the package under test) and
+      # running each under QEMU, then gating own-package coverage at 100%.
+      - name: Build + run + gate coverage (per package) under QEMU
+        run: |
+          set -eu
+          fail=0
+          for pkg in $(go list ./...); do
+            name=$(echo "$pkg" | tr '/' '_')
+            echo "::group::$pkg"
+            CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} \
+              go test -c -cover -o "/tmp/${name}.test" "$pkg"
+            docker run --rm --platform linux/${{ matrix.arch }} \
+              -e QEMU_CPU=${{ matrix.qemu }} -v /tmp:/t \
+              ${{ matrix.image }} "/t/${name}.test" \
+              -test.v -test.count=1 -test.coverprofile="/t/${name}.cov"
+            pct=$(go tool cover -func="/tmp/${name}.cov" | awk '/^total:/{print $3}')
+            echo "coverage[$pkg]=$pct"
+            [ "$pct" = "100.0%" ] || { echo "coverage below 100% for $pkg"; fail=1; }
+            echo "::endgroup::"
+          done
+          [ "$fail" = "0" ] || { echo "one or more packages below 100% coverage"; exit 1; }
