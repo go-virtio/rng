@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/go-virtio/brand/main/social/go-virtio-rng.png" alt="go-virtio/rng" width="720"></p>
+
 # go-virtio/rng
 
 Pure-Go virtio-rng (virtio-entropy) driver targeting the
