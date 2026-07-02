@@ -2,6 +2,10 @@
 
 # go-virtio/rng
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-virtio/rng.svg)](https://pkg.go.dev/github.com/go-virtio/rng)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![CI](https://github.com/go-virtio/rng/actions/workflows/ci.yml/badge.svg)](https://github.com/go-virtio/rng/actions/workflows/ci.yml)
+
 Pure-Go virtio-rng (virtio-entropy) driver targeting the
 `go-virtio/common` transport interfaces. Implements the modern-transport
 (Virtio 1.0+) init sequence and the single-virtqueue entropy-read path
