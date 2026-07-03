@@ -37,9 +37,9 @@ jobs:
           - { arch: amd64, runner: ubuntu-latest }
           - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
           check-latest: true
@@ -92,9 +92,9 @@ jobs:
           - { arch: ppc64le, image: "debian:trixie",                 qemu: "power9" }
           - { arch: s390x,   image: "debian:trixie",                 qemu: "qemu" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
           check-latest: true
