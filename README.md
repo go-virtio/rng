@@ -62,17 +62,17 @@ in `Read`.
     pure-Go virtio-net driver (the reference per-device-class driver this
     package mirrors).
   - [`github.com/go-virtio/blk`](https://github.com/go-virtio/blk) —
-    placeholder for a future pure-Go virtio-blk driver.
+    pure-Go virtio-blk (block device) driver.
+  - [`github.com/go-virtio/vsock`](https://github.com/go-virtio/vsock) —
+    pure-Go virtio-vsock driver.
 
 ## Note on the device ID
 
 The modern virtio-entropy PCI device ID (`0x1044`) lives in
 `go-virtio/common` as `PCIDeviceIDModernEntropy`, alongside
 `PCIDeviceIDModern{Net,Block}` and the `PCIDeviceIDIsEntropy` helper.
-Because those constants were added after common's `v0.1.0` tag, this
-module currently carries a `replace github.com/go-virtio/common =>
-../common` bridge in `go.mod`; drop it once common is re-tagged (`v0.1.1`)
-and bump the `require`.
+This module now consumes it directly from `common` v0.1.6 (`go.mod`
+carries a plain `require`, no `replace` bridge).
 
 ## License
 
